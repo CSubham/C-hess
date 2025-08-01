@@ -1,0 +1,25 @@
+# === C Compilation ===
+*.o
+*.out
+*.exe
+main
+
+# === SDL and build folders ===
+build/
+bin/
+
+# === User/system junk ===
+.DS_Store
+*.swp
+*.log
+*.tmp
+
+# === VS Code ===
+.vscode/
+
+# === Brave browser cache ===
+.cache/
+.cache/BraveSoftware/
+
+# === Ignore everything in home dir (just in case) ===
+/home/csubham/.cache/
