@@ -6,28 +6,16 @@
 #include <stdbool.h>
 #include <SDL2/SDL_image.h>
 
-// --- Definitions and Constants ---
-
-// Piece recognizers
-#define Pawn   'p'
-#define Rook   'r'
-#define Knight 'n'
-#define Bishop 'b'
-#define King   'k'
-#define Queen  'q'
-
 // Board and cell size
 #define WINDOW_SIZE 960
 #define CELL_SIZE   120
 
-// Enum for piece types (for texture indexing)
+// Pieces
 enum PieceType {
     WP, WR, WN, WB, WQ, WK, // White pieces
     BP, BR, BN, BB, BQ, BK, // Black pieces
     NONE
 };
-
-// --- Struct Definitions ---
 
 // Board coordinate
 struct coordinate {
@@ -38,22 +26,18 @@ struct coordinate {
 // Piece structure
 struct piece {
     struct coordinate coord;
-    char recog;
+    enum PieceType recog;
     int moved;
     int castled;
     int doubleMove;
     int color; // 1 = white, 0 = black
 };
 
-// --- Global Variables ---
-
-// Board representation
+// Backend board representation
 struct piece board[8][8];
 
 // Piece textures
 SDL_Texture* pieceTextures[12];
-
-// --- Function Declarations ---
 
 int init();
 int print_board(struct piece board[8][8]);
@@ -61,27 +45,26 @@ SDL_Texture* loadTexture(SDL_Renderer* renderer, const char* path);
 void drawPiece(SDL_Renderer* renderer, SDL_Texture* texture, int row, int col);
 int getTextureIndex(struct piece p);
 
-// --- Function Implementations ---
+// Init the board with 
+int init(){
 
-// Initialize the chess board with pieces in starting positions
-int init() {
     // Place pawns for both colors
     for (int i = 0; i < 8; i++) {
-        struct piece wpawn = {{-1, -1}, Pawn, 0, 0, 0, 1};
+        struct piece wpawn = {{-1, -1}, WP, 0, 0, 0, 1};
         board[6][i] = wpawn;
-        struct piece bpawn = {{-1, -1}, Pawn, 0, 0, 0, 0};
+        struct piece bpawn = {{-1, -1}, BP, 0, 0, 0, 0};
         board[1][i] = bpawn;
     }
 
     // White pieces (bottom row)
-    struct piece wrook1   = {{7, 0}, Rook,   0, 0, 0, 1};
-    struct piece wknight1 = {{7, 1}, Knight, 0, 0, 0, 1};
-    struct piece wbishop1 = {{7, 2}, Bishop, 0, 0, 0, 1};
-    struct piece wqueen   = {{7, 3}, Queen,  0, 0, 0, 1};
-    struct piece wking    = {{7, 4}, King,   0, 0, 0, 1};
-    struct piece wbishop2 = {{7, 5}, Bishop, 0, 0, 0, 1};
-    struct piece wknight2 = {{7, 6}, Knight, 0, 0, 0, 1};
-    struct piece wrook2   = {{7, 7}, Rook,   0, 0, 0, 1};
+    struct piece wrook1   = {{7, 0}, WR,   0, 0, 0, 1};
+    struct piece wknight1 = {{7, 1}, WK, 0, 0, 0, 1};
+    struct piece wbishop1 = {{7, 2}, WB, 0, 0, 0, 1};
+    struct piece wqueen   = {{7, 3}, WQ,  0, 0, 0, 1};
+    struct piece wking    = {{7, 4}, WK,   0, 0, 0, 1};
+    struct piece wbishop2 = {{7, 5}, WB, 0, 0, 0, 1};
+    struct piece wknight2 = {{7, 6}, WK, 0, 0, 0, 1};
+    struct piece wrook2   = {{7, 7}, WR,   0, 0, 0, 1};
 
     // Place white pieces
     board[7][0] = wrook1;
@@ -94,14 +77,14 @@ int init() {
     board[7][7] = wrook2;
 
     // Black pieces (top row)
-    struct piece brook1   = {{0, 0}, Rook,   0, 0, 0, 0};
-    struct piece bknight1 = {{0, 1}, Knight, 0, 0, 0, 0};
-    struct piece bbishop1 = {{0, 2}, Bishop, 0, 0, 0, 0};
-    struct piece bking    = {{0, 3}, King,   0, 0, 0, 0};
-    struct piece bqueen   = {{0, 4}, Queen,  0, 0, 0, 0};
-    struct piece bbishop2 = {{0, 5}, Bishop, 0, 0, 0, 0};
-    struct piece bknight2 = {{0, 6}, Knight, 0, 0, 0, 0};
-    struct piece brook2   = {{0, 7}, Rook,   0, 0, 0, 0};
+    struct piece brook1   = {{0, 0}, BR,   0, 0, 0, 0};
+    struct piece bknight1 = {{0, 1}, BK, 0, 0, 0, 0};
+    struct piece bbishop1 = {{0, 2}, BB, 0, 0, 0, 0};
+    struct piece bking    = {{0, 3}, BK,   0, 0, 0, 0};
+    struct piece bqueen   = {{0, 4}, BQ,  0, 0, 0, 0};
+    struct piece bbishop2 = {{0, 5}, BB, 0, 0, 0, 0};
+    struct piece bknight2 = {{0, 6}, BK, 0, 0, 0, 0};
+    struct piece brook2   = {{0, 7}, BR, 0, 0, 0, 0};
 
     // Place black pieces
     board[0][0] = brook1;
@@ -134,6 +117,22 @@ int print_board(struct piece board[8][8]) {
     return 0;
 }
 
+//Load piece images png file
+void loadImagesPNG(SDL_Renderer* renderer){
+    // Load piece images (PNG files)
+    pieceTextures[WP] = loadTexture(renderer, "images/Chess_plt45.png");
+    pieceTextures[WR] = loadTexture(renderer, "images/Chess_rlt45.png");
+    pieceTextures[WN] = loadTexture(renderer, "images/Chess_nlt45.png");
+    pieceTextures[WB] = loadTexture(renderer, "images/Chess_blt45.png");
+    pieceTextures[WQ] = loadTexture(renderer, "images/Chess_qlt45.png");
+    pieceTextures[WK] = loadTexture(renderer, "images/Chess_klt45.png");
+    pieceTextures[BP] = loadTexture(renderer, "images/Chess_pdt45.png");
+    pieceTextures[BR] = loadTexture(renderer, "images/Chess_rdt45.png");
+    pieceTextures[BN] = loadTexture(renderer, "images/Chess_ndt45.png");
+    pieceTextures[BB] = loadTexture(renderer, "images/Chess_bdt45.png");
+    pieceTextures[BQ] = loadTexture(renderer, "images/Chess_qdt45.png");
+    pieceTextures[BK] = loadTexture(renderer, "images/Chess_kdt45.png");
+}
 // Load image file into SDL_Texture
 SDL_Texture* loadTexture(SDL_Renderer* renderer, const char* path) {
     SDL_Surface* surface = IMG_Load(path);
@@ -172,8 +171,47 @@ int getTextureIndex(struct piece p) {
     return -1;
 }
 
-// --- Main Program ---
+//Cleanup
+void cleanup(SDL_Renderer* renderer, SDL_Window* window){
+    for (int i = 0; i < 12; i++) {
+        if (pieceTextures[i])
+            SDL_DestroyTexture(pieceTextures[i]);
+    }
+    SDL_DestroyRenderer(renderer);
+    SDL_DestroyWindow(window);
+    IMG_Quit();
+    SDL_Quit();
 
+}
+
+//Draw chessboard squares and pieces
+void drawChessBoard(SDL_Renderer* renderer){
+    for (int row = 0; row < 8; row++) {
+            for (int col = 0; col < 8; col++) {
+                // Draw board square
+                SDL_Rect square = {
+                    col * CELL_SIZE,
+                    row * CELL_SIZE,
+                    CELL_SIZE,
+                    CELL_SIZE
+                };
+                if ((row + col) % 2 == 0)
+                    SDL_SetRenderDrawColor(renderer, 240, 217, 181, 255); 
+                else
+                    SDL_SetRenderDrawColor(renderer, 181, 136, 99, 255);  
+                SDL_RenderFillRect(renderer, &square);
+
+                // Draw piece if present
+                int idx = getTextureIndex(board[row][col]);
+                if (idx != -1 && pieceTextures[idx]) {
+                    drawPiece(renderer, pieceTextures[idx], row, col);
+                }
+            }
+        }
+
+}
+
+// Main code
 int main() {
     // Initialize SDL and SDL_image
     SDL_Init(SDL_INIT_VIDEO);
@@ -188,75 +226,39 @@ int main() {
     // Initialize the chess board
     init();
 
-    // Load piece images (PNG files)
-    pieceTextures[WP] = loadTexture(renderer, "images/Chess_plt45.png");
-    pieceTextures[WR] = loadTexture(renderer, "images/Chess_rlt45.png");
-    pieceTextures[WN] = loadTexture(renderer, "images/Chess_nlt45.png");
-    pieceTextures[WB] = loadTexture(renderer, "images/Chess_blt45.png");
-    pieceTextures[WQ] = loadTexture(renderer, "images/Chess_qlt45.png");
-    pieceTextures[WK] = loadTexture(renderer, "images/Chess_klt45.png");
-    pieceTextures[BP] = loadTexture(renderer, "images/Chess_pdt45.png");
-    pieceTextures[BR] = loadTexture(renderer, "images/Chess_rdt45.png");
-    pieceTextures[BN] = loadTexture(renderer, "images/Chess_ndt45.png");
-    pieceTextures[BB] = loadTexture(renderer, "images/Chess_bdt45.png");
-    pieceTextures[BQ] = loadTexture(renderer, "images/Chess_qdt45.png");
-    pieceTextures[BK] = loadTexture(renderer, "images/Chess_kdt45.png");
+    //load png images
+    loadImagesPNG(&renderer);
+    
 
-    // --- Main Loop ---
+    // Main Loop
     bool running = true;
     SDL_Event event;
 
     while (running) {
-        // Handle events
         while (SDL_PollEvent(&event)) {
             if (event.type == SDL_QUIT)
                 running = false;
         }
+        //Chess Logic code
 
-        // Clear screen to white
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255); 
         SDL_RenderClear(renderer);
 
         // Draw chessboard squares and pieces
-        for (int row = 0; row < 8; row++) {
-            for (int col = 0; col < 8; col++) {
-                // Draw board square
-                SDL_Rect square = {
-                    col * CELL_SIZE,
-                    row * CELL_SIZE,
-                    CELL_SIZE,
-                    CELL_SIZE
-                };
-                if ((row + col) % 2 == 0)
-                    SDL_SetRenderDrawColor(renderer, 240, 217, 181, 255); // Light square
-                else
-                    SDL_SetRenderDrawColor(renderer, 181, 136, 99, 255);  // Dark square
-                SDL_RenderFillRect(renderer, &square);
-
-                // Draw piece if present
-                int idx = getTextureIndex(board[row][col]);
-                if (idx != -1 && pieceTextures[idx]) {
-                    drawPiece(renderer, pieceTextures[idx], row, col);
-                }
-            }
-        }
-
-        // Present the rendered frame
+        drawChessBoard(&renderer);
+        
+        // Display window
         SDL_RenderPresent(renderer);
-        SDL_Delay(16); // ~60 FPS
+        SDL_Delay(16); 
     }
 
-    // --- Cleanup ---
-    for (int i = 0; i < 12; i++) {
-        if (pieceTextures[i])
-            SDL_DestroyTexture(pieceTextures[i]);
-    }
-    SDL_DestroyRenderer(renderer);
-    SDL_DestroyWindow(window);
-    IMG_Quit();
-    SDL_Quit();
+    // Exit
+    drawChessBoard(&renderer);
+    
 
     return 0;
 }
+
+
 
 
