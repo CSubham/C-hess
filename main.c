@@ -47,7 +47,7 @@ struct piece
 };
 
 // Backend board representation
-struct piece board[8][8];
+    struct piece board[8][8];
 
 // Piece textures
 SDL_Texture *pieceTextures[12];
@@ -243,6 +243,79 @@ void drawChessBoard(SDL_Renderer *renderer)
     }
 }
 
+//---Game Loop---
+
+int run(char* turn, struct coordinate move[]){
+    
+    //input
+    while(true){
+        // alternates between whose move it is now;
+        turn = turn == 'b'? 'w': 'b';
+        // takes to requested move coordinate by user
+        input(turn, move);
+        // checks the validity of input provided
+        if(board[move[0].x][move[0].y].recog == NONE){
+            printf("Empty square cannot be shaked");
+             turn = turn == 'b'? 'w': 'b';
+            continue;
+        }
+        else if(board[move[0].x][move[0].y].color == 0 && turn == 'w'){
+            printf("You cannot move opponent's piece");
+
+            turn = turn == 'b'? 'w': 'b';
+            continue;
+        }else if(board[move[0].x][move[0].y].color == 1 && turn == 'b'){
+            printf("You cannot move opponent's piece");
+            turn = turn == 'b'? 'w': 'b';
+            continue;
+        }
+
+    }
+}
+
+//take move input in format e3b4
+void input(char turn, struct coordinate move[2]){
+    char coords[5];
+    printf("Enter move for %c",turn);
+    scanf("%4s", coords);
+    convertToCoord(coords, move);
+
+}
+
+void convertToCoord(char coord[], struct coordinate move[]){
+    // assuming its small case characters
+    
+    //--From where--
+    // gives column 
+    int x = coord[0] - 97;
+    //gives row
+    int y = coord[1]- '0';
+
+    //To where
+    //gives column
+    int x2 = coord[3]-97;
+    //gives row
+    int y2 = coord[4]-'0';
+
+    if(0 <= x && x < 8 && 0 <= x2 && x2 < 8 && 0 <= y && y < 8 && 0 <= y2 && y2 < 8){
+
+        struct coordinate from = {x,y};
+        struct coordinate to = {x2, y2};
+
+        move[0] = from;
+        move[1] = to;
+        return;
+        
+    }
+    
+    printf("Coordinate conversion error");
+}
+
+
+
+
+
+
 // Main code
 int main()
 {
@@ -274,6 +347,9 @@ int main()
                 running = false;
         }
         // Chess Logic code
+        char turn = 'b';
+        struct coordinate move[2];
+        run(&turn, move);
 
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
@@ -291,3 +367,5 @@ int main()
 
     return 0;
 }
+
+
