@@ -5,6 +5,7 @@
 #include <SDL2/SDL.h>
 #include <stdbool.h>
 #include <SDL2/SDL_image.h>
+#include <pthread.h>
 
 // Board and cell size
 #define WINDOW_SIZE 960
@@ -47,7 +48,7 @@ struct piece
 };
 
 // Backend board representation
-    struct piece board[8][8];
+struct piece board[8][8];
 
 // Piece textures
 SDL_Texture *pieceTextures[12];
@@ -105,8 +106,8 @@ int init()
     struct piece brook1 = {{0, 0}, BR, 0, 0, 0, 0};
     struct piece bknight1 = {{0, 1}, BN, 0, 0, 0, 0};
     struct piece bbishop1 = {{0, 2}, BB, 0, 0, 0, 0};
-    struct piece bking = {{0, 3}, BK, 0, 0, 0, 0};
-    struct piece bqueen = {{0, 4}, BQ, 0, 0, 0, 0};
+    struct piece bqueen = {{0, 3}, BQ, 0, 0, 0, 0};
+    struct piece bking = {{0, 4}, BK, 0, 0, 0, 0};
     struct piece bbishop2 = {{0, 5}, BB, 0, 0, 0, 0};
     struct piece bknight2 = {{0, 6}, BN, 0, 0, 0, 0};
     struct piece brook2 = {{0, 7}, BR, 0, 0, 0, 0};
@@ -115,8 +116,8 @@ int init()
     board[0][0] = brook1;
     board[0][1] = bknight1;
     board[0][2] = bbishop1;
-    board[0][3] = bking;
-    board[0][4] = bqueen;
+    board[0][3] = bqueen;
+    board[0][4] = bking;
     board[0][5] = bbishop2;
     board[0][6] = bknight2;
     board[0][7] = brook2;
@@ -247,13 +248,16 @@ void drawChessBoard(SDL_Renderer *renderer)
 
 //---Game Loop---
 
-//---Game Loop---
+void* run(void* arg){
 
-int run(char* turn, struct coordinate move[]){
+    //keeping turn as a pointer for preview later, possible errors in this section
+    //player move
+    char pmove = 'w';
+    char* turn = &pmove;
+    struct coordinate move[2];
     
     while(true){
-        // alternates between whose move it is now
-        *turn = (*turn == 'b') ? 'w' : 'b';
+        
 
         // takes requested move coordinate by user
         input(*turn, move);
@@ -261,66 +265,78 @@ int run(char* turn, struct coordinate move[]){
         // checks the validity of input provided
         if(board[move[0].x][move[0].y].recog == NONE){
             printf("Empty square cannot be selected\n");
-            *turn = (*turn == 'b') ? 'w' : 'b';
+           
             continue;
         }
         else if(board[move[0].x][move[0].y].color == 0 && *turn == 'w'){
             printf("You cannot move opponent's piece\n");
-            *turn = (*turn == 'b') ? 'w' : 'b';
             continue;
         }
         else if(board[move[0].x][move[0].y].color == 1 && *turn == 'b'){
             printf("You cannot move opponent's piece\n");
-            *turn = (*turn == 'b') ? 'w' : 'b';
+            continue;
+        }else if(board[move[0].x][move[0].y].color == board[move[1].x][move[1].y].color){
+            printf("You cannot capture your own piece\n");
             continue;
         }
+        // if the move is proper the coordinates are stored in the move array in from(0) and to(1) manner
+        //updating the board
 
-        break; // ✅ don’t get stuck forever once a valid move is entered
+        board[move[1].x][move[1].y] = board[move[0].x][move[0].y];
+        board[move[1].x][move[1].y].coord.x  = move[1].x;
+        board[move[1].x][move[1].y].coord.y  = move[1].y;
+
+        board[move[0].x][move[0].y].recog = NONE;
+
+
+        // alternates between whose move it is now
+        *turn = (*turn == 'b') ? 'w' : 'b';
     }
 
-    return 0;
 }
-
 
 //take move input in format e3b4
 void input(char turn, struct coordinate move[2]){
     char coords[5];
-    printf("Enter move for %c",turn);
+    printf("Enter move for %c: ",turn);
     scanf("%4s", coords);
     convertToCoord(coords, move);
 
 }
 
 void convertToCoord(char coord[], struct coordinate move[]){
-    // expecting input like "e2e4" (4 chars)
-    int x  = coord[0] - 'a';  // col
-    int y  = coord[1] - '1';  // row (0-based)
-    int x2 = coord[2] - 'a';
-    int y2 = coord[3] - '1';
+    // expecting input like "a8a6"
+    int col1 = coord[0] - 'a';       // file → col
+    int row1 = 8 - (coord[1] - '0'); // rank → row (flip so 8=0, 1=7)
 
-    if(0 <= x && x < 8 && 0 <= x2 && x2 < 8 &&
-       0 <= y && y < 8 && 0 <= y2 && y2 < 8){
+    int col2 = coord[2] - 'a';
+    int row2 = 8 - (coord[3] - '0');
 
-        move[0] = (struct coordinate){y, x};   // row, col
-        move[1] = (struct coordinate){y2, x2};
+    if (0 <= col1 && col1 < 8 && 0 <= col2 && col2 < 8 &&
+        0 <= row1 && row1 < 8 && 0 <= row2 && row2 < 8) {
+
+        printf("%d %d %d %d\n", row1, col1, row2, col2);
+
+        move[0] = (struct coordinate){row1, col1}; // (row, col)
+        move[1] = (struct coordinate){row2, col2};
         return;
     }
-    
+
     printf("Coordinate conversion error\n");
 }
-
-
-
-
-
 
 // Main code
 int main()
 {
+    
+    //Create seperate thread for the terminal input function
+    pthread_t inputThread;
+    pthread_create(&inputThread,NULL, run,NULL);
+
     // Initialize SDL and SDL_image
     SDL_Init(SDL_INIT_VIDEO);
     IMG_Init(IMG_INIT_PNG);
-
+    
     // Create window and renderer
     SDL_Window *window = SDL_CreateWindow("Chessboard",
                                           SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -344,11 +360,18 @@ int main()
             if (event.type == SDL_QUIT)
                 running = false;
         }
-        // Chess Logic code - error prone part
-        // fix turn wise input and gameloop
-        // char turn = 'b';
-        // struct coordinate move[2];
-        // run(&turn, move);
+
+        /*-------------------------------------------------------------*/
+        
+        //Chess Logic code 
+
+
+
+        
+        
+
+        /*-------------------------------------------------------------*/
+
 
         SDL_SetRenderDrawColor(renderer, 255, 255, 255, 255);
         SDL_RenderClear(renderer);
