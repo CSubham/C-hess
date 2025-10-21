@@ -60,10 +60,38 @@ void drawPiece(SDL_Renderer *renderer, SDL_Texture *texture, int row, int col);
 int getTextureIndex(struct piece p);
 void input(char turn, struct coordinate move[2]);
 void convertToCoord(char coord[], struct coordinate move[2]);
+void moveValidity(struct coordinate move []);
+void movePawn(struct coordinate move []);
+
+//moveset coordinate array
+struct coordinate* moveset; 
+int pos = 0;
+
+//increase size of moveset
+void increaseSizeMoveset(){
+    moveset =  realloc(moveset, sizeof( moveset) * 2);
+}
+
+void putMoveset(struct coordinate coord){
+
+    if(sizeof(moveset) / sizeof(struct coordinate) == pos-1 ) increaseSizeMoveset();
+    moveset[pos] =  coord; 
+    pos++;
+
+}
+
+void clearMoveset(){
+    moveset =  realloc(moveset, sizeof( struct coordinate));
+    pos = 0;
+}
+
 
 // Init the board with
 int init()
 {
+    // initialise moveset variable
+    moveset = malloc(10 * sizeof(struct coordinate));
+
     // initilisation with empty first
     for (int row = 0; row < 8; row++)
     {
@@ -258,7 +286,6 @@ void* run(void* arg){
     
     while(true){
         
-
         // takes requested move coordinate by user
         input(*turn, move);
 
@@ -275,25 +302,203 @@ void* run(void* arg){
         else if(board[move[0].x][move[0].y].color == 1 && *turn == 'b'){
             printf("You cannot move opponent's piece\n");
             continue;
-        }else if(board[move[0].x][move[0].y].color == board[move[1].x][move[1].y].color){
+        }else if(board[move[1].x][move[1].y].recog != NONE && board[move[0].x][move[0].y].color == board[move[1].x][move[1].y].color){
             printf("You cannot capture your own piece\n");
             continue;
         }
         // if the move is proper the coordinates are stored in the move array in from(0) and to(1) manner
         //updating the board
+        /*--------------------------VALIDITY OF MOVE CHECK-----------------*/
+
+        moveValidity(move);
+        for(int i =0 ; i < pos; i++){
+            printf("X: %d,Y: %d \n",moveset[i].x, moveset[i].y );
+        }
+
+        bool canMove = false;
+        for(int i =0 ; i < pos; i++){
+            if(move[1].x == moveset[i].x && move[1].y == moveset[i].y){
+                 canMove = true;
+            }
+        }
+
+
+
+
+        
+        /*-----------------------------------------------------------------*/
+        if(canMove){
 
         board[move[1].x][move[1].y] = board[move[0].x][move[0].y];
         board[move[1].x][move[1].y].coord.x  = move[1].x;
         board[move[1].x][move[1].y].coord.y  = move[1].y;
-
         board[move[0].x][move[0].y].recog = NONE;
-
 
         // alternates between whose move it is now
         *turn = (*turn == 'b') ? 'w' : 'b';
+
+        }
+
+        // clearing moveset
+        clearMoveset();
+
+
     }
 
 }
+
+/*--------------------------VALIDITY OF MOVE CHECK-----------------*/
+
+
+void moveValidity(struct coordinate move []){
+
+    if(board[move[0].x][move[0].y].recog == WP || board[move[0].x][move[0].y].recog == BP){
+        movePawn(move);
+    }else if(board[move[0].x][move[0].y].recog == WR || board[move[0].x][move[0].y].recog == BR ){
+
+    }else if(board[move[0].x][move[0].y].recog == WN || board[move[0].x][move[0].y].recog == BN){
+
+    }else if(board[move[0].x][move[0].y].recog == WB || board[move[0].x][move[0].y].recog == BB){
+
+    }else if(board[move[0].x][move[0].y].recog == WQ || board[move[0].x][move[0].y].recog == BQ){
+
+    }else if(board[move[0].x][move[0].y].recog == WK || board[move[0].x][move[0].y].recog == BK){
+
+    }else{
+        printf("None");
+    }
+        
+    
+    
+}
+
+void movePawn(struct coordinate move []){
+    // to encompass en passant,
+    // moved -> 1
+    // doubleMove -> 0 previous move wasnt double
+    // doubleMove -> 1 previous move was double
+
+   struct piece p = board[move[0].x][move[0].y];
+    
+    if(p.color == 0) {
+        //Adding double moves
+        //+2
+        if(p.moved == 0){
+            if(move[0].x + 2 <= 7 && board[move[0].x+2][move[1].y].recog == NONE ){
+            struct coordinate coord = {move[0].x +2, move[0].y};
+            putMoveset(coord);
+            }
+            p.doubleMove = 1;
+            p.moved = 1;
+        }
+
+        //+1
+        if(move[0].x + 1 <= 7 && board[move[0].x +1][move[1].y].recog == NONE ){
+            struct coordinate coord = {move[0].x +1, move[0].y};
+            putMoveset(coord);
+            p.doubleMove = 0;
+            p.moved = 1;
+        }
+
+        // diagonal right
+        if(move[0].y + 1 <= 7 && move[0].x + 1 <= 7){
+            if(board[move[0].x +1][move[1].y+1].recog != NONE){
+                if(p.color != board[move[0].x +1][move[1].y+1].color){
+                    struct coordinate coord = {move[0].x +1, move[0].y+1};
+                    putMoveset(coord);
+                }
+            }
+            p.doubleMove = 0;
+            p.moved = 1;
+        }
+
+        //diagonal left 
+        if(move[0].y - 1 >= 0 && move[0].x + 1 <= 7){
+            if(board[move[0].x +1][move[1].y-1].recog != NONE){
+                if(p.color != board[move[0].x +1][move[1].y-1].color){
+                    struct coordinate coord = {move[0].x +1, move[0].y-1};
+                    putMoveset(coord);
+                }
+            }
+            p.doubleMove = 0;
+            p.moved = 1;
+        }
+
+        //en passant 
+
+        if(move[0].y-1 >= 0){
+            
+
+        }
+
+        if(move[0].y+1 <= 7){
+
+        }
+
+
+    }else{
+        //Adding double moves
+        //-2
+        if(p.moved == 0){
+            if(move[0].x - 2 >= 0 && board[move[0].x-2][move[1].y].recog == NONE ){
+            struct coordinate coord = {move[0].x -2, move[0].y};
+            putMoveset(coord);
+            }
+            p.doubleMove = 1;
+            p.moved = 1;
+        }
+
+        //+1
+        if(move[0].x - 1 >= 0 && board[move[0].x -1][move[1].y].recog == NONE ){
+            struct coordinate coord = {move[0].x -1, move[0].y};
+            putMoveset(coord);
+            p.doubleMove = 0;
+            p.moved = 1;
+        }
+
+        // diagonal left
+        if(move[0].y - 1 >= 0 && move[0].x - 1 >= 0){
+            if(board[move[0].x - 1][move[1].y- 1].recog != NONE){
+                if(p.color != board[move[0].x - 1][move[1].y - 1].color){
+                    struct coordinate coord = {move[0].x - 1, move[0].y- 1};
+                    putMoveset(coord);
+                }
+            
+            }
+            p.doubleMove = 0;
+            p.moved = 1;
+        }
+
+        // diagonal right
+        if(move[0].y + 1 <=7  && move[0].x - 1 >= 0){
+            if(board[move[0].x - 1][move[1].y+ 1].recog != NONE){
+                if(p.color != board[move[0].x - 1][move[1].y + 1].color){
+                    struct coordinate coord = {move[0].x - 1, move[0].y + 1};
+                    putMoveset(coord);
+                }
+            
+            }
+            p.doubleMove = 0;
+            p.moved = 1;
+        }
+
+        //en passant 
+
+    }
+
+        
+}
+
+
+
+
+        
+/*-----------------------------------------------------------------*/
+
+
+
+//Make the move after checking legality of the move
+
 
 //take move input in format e3b4
 void input(char turn, struct coordinate move[2]){
