@@ -314,11 +314,25 @@ void* run(void* arg){
         for(int i =0 ; i < pos; i++){
             printf("X: %d,Y: %d \n",moveset[i].x, moveset[i].y );
         }
-
+        struct piece p = board[move[0].x][move[0].y];
         bool canMove = false;
         for(int i =0 ; i < pos; i++){
             if(move[1].x == moveset[i].x && move[1].y == moveset[i].y){
-                 canMove = true;
+                canMove = true;
+                
+                // if pawn and if its double move set it to moved and set move to moved
+                if(p.recog == WP || p.recog == BP){
+                    if(abs(move[1].x  - move[0].x) == 2 ){
+                        
+                        board[move[0].x][move[0].y].doubleMove = 1;
+                    }else{
+                        
+                        board[move[0].x][move[0].y].doubleMove = 0;
+                        
+                    }
+                }
+                board[move[0].x][move[0].y].moved =1 ;
+                 
             }
         }
 
@@ -328,7 +342,30 @@ void* run(void* arg){
         
         /*-----------------------------------------------------------------*/
         if(canMove){
+            //en passant checks
+            //the sum of diagonal coords is either both even or both odd 
+            if(move[0].y != move[1].y && move[0].x != move[1].x ){
+                    if(p.recog == WP || p.recog == BP){
+                        if(board[move[1].x][move[1].y].recog == NONE){
 
+                            if(p.recog == WP && board[move[1].x+1][move[1].y].recog != NONE ){
+                               board[move[1].x+1][move[1].y] = (struct piece){{move[1].x+1, move[1].y}, NONE, 0, 0, 0, 0};
+
+                            }else if(p.recog == BP && board[move[1].x-1][move[1].y].recog != NONE ){
+                              board[move[1].x-1][move[1].y] = (struct piece){{move[1].x+1, move[1].y}, NONE, 0, 0, 0, 0};
+
+                            }
+
+                            
+                        }
+
+                    }
+                    
+                    
+                    
+                }
+        
+            
         board[move[1].x][move[1].y] = board[move[0].x][move[0].y];
         board[move[1].x][move[1].y].coord.x  = move[1].x;
         board[move[1].x][move[1].y].coord.y  = move[1].y;
@@ -388,16 +425,14 @@ void movePawn(struct coordinate move []){
             struct coordinate coord = {move[0].x +2, move[0].y};
             putMoveset(coord);
             }
-            p.doubleMove = 1;
-            p.moved = 1;
+            
         }
 
         //+1
         if(move[0].x + 1 <= 7 && board[move[0].x +1][move[1].y].recog == NONE ){
             struct coordinate coord = {move[0].x +1, move[0].y};
             putMoveset(coord);
-            p.doubleMove = 0;
-            p.moved = 1;
+            
         }
 
         // diagonal right
@@ -408,8 +443,7 @@ void movePawn(struct coordinate move []){
                     putMoveset(coord);
                 }
             }
-            p.doubleMove = 0;
-            p.moved = 1;
+            
         }
 
         //diagonal left 
@@ -420,20 +454,38 @@ void movePawn(struct coordinate move []){
                     putMoveset(coord);
                 }
             }
-            p.doubleMove = 0;
-            p.moved = 1;
+            
         }
 
         //en passant 
 
-        if(move[0].y-1 >= 0){
-            
+            if(move[0].x+1 <=7 &&
+                move[0].y-1 >= 0 &&
+                (board[move[0].x][move[0].y -1].recog == WP ||
+                board[move[0].x][move[0].y -1].recog == BP )&&
+                board[move[0].x][move[0].y -1].color != p.color &&
+                board[move[0].x][move[0].y -1].doubleMove == 1 
+                ){
 
-        }
+                    struct coordinate coord = {move[0].x+1, move[0].y-1};
+                    putMoveset(coord);
 
-        if(move[0].y+1 <= 7){
+                }
 
-        }
+            if((move[0].x+1 <=7 &&
+                move[0].y+1 <= 7 &&
+                board[move[0].x][move[0].y +1].recog == WP ||
+                board[move[0].x][move[0].y +1].recog == BP ) &&
+                board[move[0].x][move[0].y +1].color != p.color &&
+                board[move[0].x][move[0].y +1].doubleMove == 1 
+                
+                ){
+
+                    struct coordinate coord = {move[0].x+1, move[0].y+1};
+                    putMoveset(coord);
+
+                }
+
 
 
     }else{
@@ -444,16 +496,14 @@ void movePawn(struct coordinate move []){
             struct coordinate coord = {move[0].x -2, move[0].y};
             putMoveset(coord);
             }
-            p.doubleMove = 1;
-            p.moved = 1;
+            
         }
 
         //+1
         if(move[0].x - 1 >= 0 && board[move[0].x -1][move[1].y].recog == NONE ){
             struct coordinate coord = {move[0].x -1, move[0].y};
             putMoveset(coord);
-            p.doubleMove = 0;
-            p.moved = 1;
+           
         }
 
         // diagonal left
@@ -465,8 +515,7 @@ void movePawn(struct coordinate move []){
                 }
             
             }
-            p.doubleMove = 0;
-            p.moved = 1;
+            
         }
 
         // diagonal right
@@ -478,11 +527,39 @@ void movePawn(struct coordinate move []){
                 }
             
             }
-            p.doubleMove = 0;
-            p.moved = 1;
+            
         }
 
         //en passant 
+
+            if( move[0].x-1 >=0 &&
+                move[0].y-1 >= 0 &&
+                (board[move[0].x][move[0].y -1].recog == WP ||
+                board[move[0].x][move[0].y -1].recog == BP )&&
+                board[move[0].x][move[0].y -1].color != p.color &&
+                board[move[0].x][move[0].y -1].doubleMove == 1 
+                
+                ){
+
+                    struct coordinate coord = {move[0].x-1, move[0].y-1};
+                    putMoveset(coord);
+
+                }
+                
+            if( move[0].x-1 >= 0 &&
+                move[0].y+1 <= 7 &&
+                (board[move[0].x][move[0].y +1].recog == WP ||
+                board[move[0].x][move[0].y +1].recog == BP ) &&
+                board[move[0].x][move[0].y +1].color != p.color &&
+                board[move[0].x][move[0].y +1].doubleMove == 1 
+                
+                ){
+
+                    struct coordinate coord = {move[0].x-1, move[0].y+1};
+                    putMoveset(coord);
+                    //removing pawn capture due to en passant
+
+                }
 
     }
 
