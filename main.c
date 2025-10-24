@@ -392,11 +392,12 @@ void moveValidity(struct coordinate move []){
     if(board[move[0].x][move[0].y].recog == WP || board[move[0].x][move[0].y].recog == BP){
         movePawn(move);
     }else if(board[move[0].x][move[0].y].recog == WR || board[move[0].x][move[0].y].recog == BR ){
+        moveRook(move);
 
     }else if(board[move[0].x][move[0].y].recog == WN || board[move[0].x][move[0].y].recog == BN){
-
+        moveKnight(move);
     }else if(board[move[0].x][move[0].y].recog == WB || board[move[0].x][move[0].y].recog == BB){
-
+        moveBishop(move);
     }else if(board[move[0].x][move[0].y].recog == WQ || board[move[0].x][move[0].y].recog == BQ){
 
     }else if(board[move[0].x][move[0].y].recog == WK || board[move[0].x][move[0].y].recog == BK){
@@ -409,6 +410,223 @@ void moveValidity(struct coordinate move []){
     
 }
 
+void moveBishop(struct coordinate move[]){
+   
+    struct piece p = board[move[0].x][move[0].y];
+    
+    
+    for(int i = move[0].x, j = move[0].y; i <= 7 && j <= 7; i++, j++){
+
+        if(board[i][j].recog == NONE){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+        }else if(board[i][j].color != p.color){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+   
+    for(int i = move[0].x, j = move[0].y; i >= 0 && j >=0; i--, j--){
+
+        if(board[i][j].recog == NONE){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+        }else if(board[i][j].color != p.color){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+   
+    for(int i = move[0].x, j = move[0].y; i >= 0 && j <= 7; i--, j++){
+
+        if(board[i][j].recog == NONE){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+        }else if(board[i][j].color != p.color){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+    
+
+    for(int i = move[0].x, j = move[0].y; i <= 7 && j >= 0; i++, j--){
+
+        if(board[i][j].recog == NONE){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+        }else if(board[i][j].color != p.color){
+            struct coordinate coord = {i, j};
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+
+
+}
+
+
+
+
+void moveKnight( struct coordinate move[]){
+    struct piece p = board[move[0].x][move[0].y];
+    
+    if(move[0].x -2 >= 0 && move[0].y -1 >= 0){
+        if(board[move[0].x -2][move[0].y -1].color != p.color ||
+            board[move[0].x -2][move[0].y -1].recog == NONE){
+                struct coordinate coord = {move[0].x -2, move[0].y -1};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x -2 >= 0 && move[0].y + 1 <= 7){
+        if(board[move[0].x -2][move[0].y +1].color != p.color ||
+            board[move[0].x -2][move[0].y +1].recog == NONE){
+                struct coordinate coord = {move[0].x -2, move[0].y + 1};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x -1 >= 0 && move[0].y + 2 <= 7){
+        if(board[move[0].x - 1][move[0].y + 2].color != p.color ||
+            board[move[0].x - 1][move[0].y + 2].recog == NONE){
+                struct coordinate coord = {move[0].x - 1, move[0].y + 2};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x -1 >= 0 && move[0].y - 2 >= 0){
+        if(board[move[0].x - 1][move[0].y - 2].color != p.color ||
+            board[move[0].x - 1][move[0].y - 2].recog == NONE){
+                struct coordinate coord = {move[0].x - 1, move[0].y - 2};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x + 1 <= 7  && move[0].y + 2 <= 7){
+        if(board[move[0].x + 1][move[0].y + 2].color != p.color ||
+            board[move[0].x + 1][move[0].y + 2].recog == NONE){
+                struct coordinate coord = {move[0].x + 1, move[0].y + 2};
+                putMoveset(coord);
+            }
+    }
+    
+    if(move[0].x + 1 <= 7 && move[0].y - 2 >= 0){
+        if(board[move[0].x + 1][move[0].y - 2].color != p.color ||
+            board[move[0].x + 1][move[0].y - 2].recog == NONE){
+                struct coordinate coord = {move[0].x + 1, move[0].y - 2};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x +2 <= 7  && move[0].y -1 >= 0){
+        if(board[move[0].x +2][move[0].y -1].color != p.color ||
+            board[move[0].x +2][move[0].y -1].recog == NONE){
+                struct coordinate coord = {move[0].x +2, move[0].y -1};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x +2 <= 7 && move[0].y + 1 <= 7){
+        if(board[move[0].x +2][move[0].y +1].color != p.color ||
+            board[move[0].x +2][move[0].y +1].recog == NONE){
+                struct coordinate coord = {move[0].x +2, move[0].y + 1};
+                putMoveset(coord);
+            }
+    }
+
+
+
+}
+
+void moveRook(struct coordinate move[]){
+    struct piece p = board[move[0].x][move[0].y];
+    
+    //up
+    for(int i = move[0].x; i >= 0; i--){
+
+        if(board[i][move[0].y].recog == NONE){
+            struct coordinate coord = {i, move[0].y};
+            putMoveset(coord);
+        }else if(board[i][move[0].y].color != p.color){
+            struct coordinate coord = {i, move[0].y};
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+    //down
+    for(int i = move[0].x; i <= 7; i++){
+
+        if(board[i][move[0].y].recog == NONE){
+            struct coordinate coord = {i, move[0].y};
+            putMoveset(coord);
+        }else if(board[i][move[0].y].color != p.color){
+            struct coordinate coord = {i, move[0].y};
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+    //right
+    for(int i = move[0].y; i <= 7; i++){
+
+        if(board[i][move[0].y].recog == NONE){
+            struct coordinate coord = {move[0].x, i};
+            putMoveset(coord);
+        }else if(board[i][move[0].y].color != p.color){
+            struct coordinate coord = {move[0].x, i };
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+    //left
+    for(int i = move[0].y; i >= 7; i--){
+
+        if(board[i][move[0].y].recog == NONE){
+            struct coordinate coord = {move[0].x, i};
+            putMoveset(coord);
+        }else if(board[i][move[0].y].color != p.color){
+            struct coordinate coord = {move[0].x, i };
+            putMoveset(coord);
+            break;
+        }else{
+            break;
+        }
+
+    }
+
+
+
+}
 void movePawn(struct coordinate move []){
     // to encompass en passant,
     // moved -> 1
