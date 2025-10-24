@@ -410,6 +410,78 @@ void moveValidity(struct coordinate move []){
     
 }
 
+void moveQueen(struct coordinate move[]){
+
+    struct piece p = board[move[0].x][move[0].y];
+    
+    if(move[0].x -1 >= 0){
+        if(board[move[0].x -1][move[0].y ].color != p.color ||
+            board[move[0].x -1][move[0].y ].recog == NONE){
+                struct coordinate coord = {move[0].x -1, move[0].y };
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x +1 <= 7){
+        if(board[move[0].x +1][move[0].y ].color != p.color ||
+            board[move[0].x +1][move[0].y ].recog == NONE){
+                struct coordinate coord = {move[0].x +1, move[0].y };
+                putMoveset(coord);
+            }
+    }
+
+     if( move[0].y -1 >= 0){
+        if(board[move[0].x ][move[0].y - 1].color != p.color ||
+            board[move[0].x][move[0].y-1 ].recog == NONE){
+                struct coordinate coord = {move[0].x , move[0].y-1 };
+                putMoveset(coord);
+            }
+    }
+
+    if( move[0].y +1 <= 7){
+        if(board[move[0].x ][move[0].y + 1].color != p.color ||
+            board[move[0].x][move[0].y+ 1 ].recog == NONE){
+                struct coordinate coord = {move[0].x , move[0].y+1 };
+                putMoveset(coord);
+            }
+    }
+
+     if(move[0].x -1 >= 0 && move[0].y -1 >= 0){
+        if(board[move[0].x -1][move[0].y -1].color != p.color ||
+            board[move[0].x -1][move[0].y -1].recog == NONE){
+                struct coordinate coord = {move[0].x -1, move[0].y -1};
+                putMoveset(coord);
+            }
+    }
+
+     if(move[0].x +1 <= 7 && move[0].y +1 <= 7){
+        if(board[move[0].x +1][move[0].y +1].color != p.color ||
+            board[move[0].x +1][move[0].y +1].recog == NONE){
+                struct coordinate coord = {move[0].x +1, move[0].y +1};
+                putMoveset(coord);
+            }
+    }
+
+    if(move[0].x +1 <= 7 && move[0].y -1 >= 0){
+        if(board[move[0].x +1][move[0].y -1].color != p.color ||
+            board[move[0].x +1][move[0].y -1].recog == NONE){
+                struct coordinate coord = {move[0].x +1, move[0].y -1};
+                putMoveset(coord);
+            }
+    }
+
+     if(move[0].x -1 >= 0 && move[0].y +1 <= 7){
+        if(board[move[0].x -1][move[0].y +1].color != p.color ||
+            board[move[0].x -1][move[0].y +1].recog == NONE){
+                struct coordinate coord = {move[0].x - 1, move[0].y +1};
+                putMoveset(coord);
+            }
+    }
+
+    moveRook(move);
+    moveBishop(move);
+}
+
 void moveBishop(struct coordinate move[]){
    
     struct piece p = board[move[0].x][move[0].y];
