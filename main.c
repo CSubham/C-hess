@@ -63,26 +63,23 @@ void input(char turn, struct coordinate move[2]);
 void convertToCoord(char coord[], struct coordinate move[2]);
 void moveValidity(struct coordinate move[], bool AMCall);
 void movePawn(struct coordinate move[], bool AMCall);
-struct coordinate generateAM(struct coordinate move[]);
+struct coordinate generateAM(struct coordinate move[], int attacker_color);
 void moveKing(struct coordinate move[]);
 void moveQueen(struct coordinate move[]);
 void moveBishop(struct coordinate move[]);
 void moveKnight(struct coordinate move[]);
 void moveRook(struct coordinate move[]);
+void increaseSizeMoveset();
+
 
 // moveset coordinate array
 struct coordinate *moveset;
+// position to store at moveset
 int pos = 0;
+// track how many elements allocated
+int moveset_capacity = 1;
 
-// increase size of moveset
-int moveset_capacity = 1; // track how many elements allocated
-
-void increaseSizeMoveset()
-{
-    moveset_capacity *= 2;
-    moveset = realloc(moveset, moveset_capacity * sizeof(struct coordinate));
-}
-
+//put coordinate in moveset
 void putMoveset(struct coordinate coord)
 {
     if (pos >= moveset_capacity)
@@ -92,10 +89,17 @@ void putMoveset(struct coordinate coord)
     pos++;
 }
 
+// increase size of moveset
+void increaseSizeMoveset()
+{
+    moveset_capacity *= 2;
+    moveset = realloc(moveset, moveset_capacity * sizeof(struct coordinate));
+}
+
+//clear all the values in moveset
 void clearMoveset()
 {
-    moveset_capacity = 1;
-    moveset = realloc(moveset, moveset_capacity * sizeof(struct coordinate));
+    // don't shrink the allocated buffer every clear — just reset position
     pos = 0;
 }
 
@@ -104,6 +108,8 @@ int init()
 {
     // initialise moveset variable
     moveset = malloc(10 * sizeof(struct coordinate));
+    moveset_capacity = 10; // keep capacity in sync with allocation
+    pos = 0;
 
     // initilisation with empty first
     for (int row = 0; row < 8; row++)
@@ -169,16 +175,17 @@ int init()
 // Print the board to the console (for debugging)
 int print_board(struct piece board[8][8])
 {
+    // mapping for enums -> printable chars
+    const char pieceChars[] = { 'P','R','N','B','Q','K', 'p','r','n','b','q','k', '_' };
+
     for (int i = 0; i < 8; i++)
     {
         for (int j = 0; j < 8; j++)
         {
-            if (board[i][j].recog != 0)
+            if (board[i][j].recog != NONE)
             {
-                if (board[i][j].color == 1)
-                    printf("%c ", toupper(board[i][j].recog));
-                else
-                    printf("%c ", board[i][j].recog);
+                char c = pieceChars[board[i][j].recog];
+                printf("%c ", c);
             }
             else
             {
@@ -234,7 +241,6 @@ void drawPiece(SDL_Renderer *renderer, SDL_Texture *texture, int row, int col)
 }
 
 // Map struct piece to enum PieceType index for texture lookup
-
 int getTextureIndex(struct piece p)
 {
     if (p.recog >= WP && p.recog <= BK)
@@ -290,7 +296,6 @@ void drawChessBoard(SDL_Renderer *renderer)
 //---Game Loop---
 void *run(void *arg)
 {
-
     // keeping turn as a pointer for preview later, possible errors in this section
     // player move
     char pmove = 'w';
@@ -299,6 +304,130 @@ void *run(void *arg)
 
     while (true)
     {
+        /* ---------- checkmate / stalemate ---------- */
+        struct coordinate wk[2] = {{-1,-1},{-1,-1}};
+        struct coordinate bk[2] = {{-1,-1},{-1,-1}};
+
+        // find kings
+        for (int i = 0; i < 8; i++) {
+            for (int j = 0; j < 8; j++) {
+                if (board[i][j].recog == WK) { wk[0].x = i; wk[0].y = j; wk[1].x = i; wk[1].y = j; }
+                else if (board[i][j].recog == BK) { bk[0].x = i; bk[0].y = j; bk[1].x = i; bk[1].y = j; }
+            }
+        }
+
+        int cur_color = (*turn == 'w') ? 1 : 0;
+        struct coordinate king_pos = (cur_color == 1) ? wk[0] : bk[0];
+
+        if (king_pos.x >= 0 && king_pos.x < 8 && king_pos.y >= 0 && king_pos.y < 8) {
+            // generate opponent attack-map for current position (attacker = !cur_color)
+            struct coordinate am_query[2] = {{0,0}, { king_pos.x, king_pos.y }};
+            memset(attack_map, 0, sizeof(attack_map));
+            clearMoveset();
+            generateAM(am_query, !cur_color);
+            bool in_check = attack_map[king_pos.x][king_pos.y];
+            clearMoveset();
+
+            // search for any legal move for current side
+            int found_legal = 0;
+            for (int src_row = 0; src_row < 8 && !found_legal; src_row++) {
+                for (int src_col = 0; src_col < 8 && !found_legal; src_col++) {
+                    if (board[src_row][src_col].recog == NONE) continue;
+                    if (board[src_row][src_col].color != cur_color) continue;
+
+                    // generate moves for this piece
+                    struct coordinate test_move[2] = {{src_row, src_col}, {src_row, src_col}};
+                    clearMoveset();
+                    moveValidity(test_move, false);
+
+                    for (int move_index = 0; move_index < pos && !found_legal; move_index++) {
+                        struct coordinate dest = moveset[move_index];
+                        if (dest.x < 0 || dest.x > 7 || dest.y < 0 || dest.y > 7) continue;
+
+                        // backup source and dest
+                        struct piece src_backup = board[src_row][src_col];
+                        struct piece dest_backup = board[dest.x][dest.y];
+
+                        // en-passant handling: if pawn diagonal move to empty square, possible ep capture
+                        struct piece ep_victim = {0};
+                        int ep_row = -1, ep_col = -1;
+                        int ep_taken = 0;
+                        if ((src_backup.recog == WP || src_backup.recog == BP) &&
+                            (src_col != dest.y) && (src_row != dest.x) && dest_backup.recog == NONE) {
+                            int victim_row = (src_backup.recog == WP) ? dest.x + 1 : dest.x - 1;
+                            int victim_col = dest.y;
+                            if (victim_row >= 0 && victim_row < 8 && victim_col >= 0 && victim_col < 8) {
+                                struct piece maybe = board[victim_row][victim_col];
+                                if ((maybe.recog == WP || maybe.recog == BP) &&
+                                    maybe.color != src_backup.color &&
+                                    maybe.doubleMove == 1) {
+                                    ep_victim = maybe; ep_row = victim_row; ep_col = victim_col; ep_taken = 1;
+                                    board[victim_row][victim_col] = (struct piece){{victim_row, victim_col}, NONE,0,0,0,0};
+                                }
+                            }
+                        }
+
+                        // apply move
+                        board[dest.x][dest.y] = board[src_row][src_col];
+                        board[dest.x][dest.y].coord.x = dest.x;
+                        board[dest.x][dest.y].coord.y = dest.y;
+                        board[src_row][src_col] = (struct piece){{src_row, src_col}, NONE,0,0,0,0};
+
+                        // determine defender king position after move
+                        struct coordinate new_king = king_pos;
+                        if (src_backup.recog == WK || src_backup.recog == BK) new_king = dest;
+
+                        // regenerate opponent attack-map after this hypothetical move
+                        struct coordinate am_q2[2] = {{0,0}, { new_king.x, new_king.y }};
+                        memset(attack_map, 0, sizeof(attack_map));
+                        clearMoveset();
+                        generateAM(am_q2, !cur_color);
+
+                        bool king_safe = true;
+                        if (new_king.x >= 0 && new_king.x < 8 && new_king.y >= 0 && new_king.y < 8) {
+                            if (attack_map[new_king.x][new_king.y]) king_safe = false;
+                        } else king_safe = false;
+
+                        // rollback
+                        board[src_row][src_col] = src_backup;
+                        board[dest.x][dest.y] = dest_backup;
+                        if (ep_taken && ep_row >= 0) board[ep_row][ep_col] = ep_victim;
+                        clearMoveset();
+
+                        if (king_safe) { found_legal = 1; break; }
+                    } // end moves loop
+                }
+            } // end board scan
+
+            if (!found_legal) {
+                if (in_check) {
+                    if (cur_color == 1) printf("Checkmate by black\n"); else printf("Checkmate by white\n");
+                    break;
+                } else {
+                    // only declare stalemate if all adjacent king squares are either off-board, occupied by own piece, or attacked
+                    int kx = king_pos.x, ky = king_pos.y;
+                    int adj_has_safe = 0;
+                    for (int dx = -1; dx <= 1 && !adj_has_safe; dx++) {
+                        for (int dy = -1; dy <= 1 && !adj_has_safe; dy++) {
+                            if (dx == 0 && dy == 0) continue;
+                            int nx = kx + dx, ny = ky + dy;
+                            if (nx < 0 || nx > 7 || ny < 0 || ny > 7) continue;
+                            // square is candidate if empty or capturable (enemy piece)
+                            if (board[nx][ny].recog == NONE || board[nx][ny].color != cur_color) {
+                                // if not attacked it's a safe adjacent square
+                                if (!attack_map[nx][ny]) { adj_has_safe = 1; break; }
+                            }
+                        }
+                    }
+                    if (!adj_has_safe) {
+                        printf("Stalemate\n");
+                        break;
+                    }
+                }
+            }
+            clearMoveset();
+        }
+        /* ---------- end mate/stalemate ---------- */
 
         // takes requested move coordinate by user
         input(*turn, move);
@@ -368,7 +497,7 @@ void *run(void *arg)
 
             /* en-passant bookkeeping */
             struct piece ep_victim = {0};
-            int ep_vx = -1, ep_vy = -1;
+            int ep_row = -1, ep_col = -1;
             int ep_taken = 0;
 
             /* en-passant detection & remove victim (if any) */
@@ -378,19 +507,20 @@ void *run(void *arg)
                 {
                     if (board[move[1].x][move[1].y].recog == NONE)
                     {
-                        int vx = (p.recog == WP) ? move[1].x + 1 : move[1].x - 1;
-                        int vy = move[1].y;
-                        if (vx >= 0 && vx < 8 && vy >= 0 && vy < 8)
+                        int victimRow = (p.recog == WP) ? move[1].x + 1 : move[1].x - 1;
+                        int victimCol = move[1].y;
+                        if (victimRow >= 0 && victimRow < 8 && victimCol >= 0 && victimCol < 8)
                         {
-                            struct piece maybe = board[vx][vy];
+                            struct piece maybe = board[victimRow][victimCol];
                             if ((maybe.recog == WP || maybe.recog == BP) &&
                                 maybe.color != p.color &&
                                 maybe.doubleMove == 1)
                             {
                                 ep_victim = maybe;
-                                ep_vx = vx; ep_vy = vy;
+                                ep_row = victimRow;
+                                ep_col = victimCol;
                                 ep_taken = 1;
-                                board[vx][vy] = (struct piece){{vx, vy}, NONE, 0, 0, 0, 0};
+                                board[victimRow][victimCol] = (struct piece){{victimRow, victimCol}, NONE, 0, 0, 0, 0};
                             }
                         }
                     }
@@ -403,55 +533,50 @@ void *run(void *arg)
             board[move[1].x][move[1].y].coord.y = move[1].y;
             board[move[0].x][move[0].y] = (struct piece){{move[0].x, move[0].y}, NONE, 0, 0, 0, 0};
 
-            /* generate opponent attack map (generateAM should build attacks for the opponent) */
-            struct coordinate king_pos = generateAM(move);
-            for (int i = 0; i < 8; i++)
-            {
-                for (int j = 0; j < 8; j++)
-                    printf("%d ", attack_map[i][j]); // prints 0 or 1
-                printf("\n");
-            }
-
-            /* find defender king (the side that attempted this move) */
-            int defender_color = src_backup.color;
-            struct coordinate defender_king = {-1, -1};
-            for (int i = 0; i < 8; i++)
-            {
-                for (int j = 0; j < 8; j++)
-                {
-                    if ((board[i][j].recog == WK && defender_color == 1) ||
-                        (board[i][j].recog == BK && defender_color == 0))
-                    {
-                        defender_king.x = i;
-                        defender_king.y = j;
+            /* generate opponent attack map (attacker = opponent of mover) to test if mover left own king in check */
+            struct coordinate king_pos_after_move = {-1,-1};
+            // find mover's king (its color == src_backup.color)
+            for (int i = 0; i < 8; i++) {
+                for (int j = 0; j < 8; j++) {
+                    if ((board[i][j].recog == WK && src_backup.color == 1) ||
+                        (board[i][j].recog == BK && src_backup.color == 0)) {
+                        king_pos_after_move.x = i;
+                        king_pos_after_move.y = j;
                         break;
                     }
                 }
-                if (defender_king.x != -1)
-                    break;
+                if (king_pos_after_move.x != -1) break;
             }
 
-            /* if defender king is attacked -> rollback everything and continue */
-            if (defender_king.x >= 0 && attack_map[defender_king.x][defender_king.y])
-            {
-                /* restore source (use src_backup to preserve flags exactly) */
+            // generate attack map for opponent now (use the destination piece as reference; generateAM expects move[] but only uses board)
+            struct coordinate am_query2[2] = {{0,0}, { move[1].x, move[1].y }};
+            memset(attack_map, 0, sizeof(attack_map));
+            clearMoveset();
+            generateAM(am_query2, !cur_color);
+
+            // if mover's king is under attack, rollback and reject move
+            if (king_pos_after_move.x >= 0 && attack_map[king_pos_after_move.x][king_pos_after_move.y]) {
+                // rollback source
                 board[move[0].x][move[0].y] = src_backup;
                 board[move[0].x][move[0].y].coord.x = move[0].x;
                 board[move[0].x][move[0].y].coord.y = move[0].y;
 
-                /* restore destination */
+                // rollback destination
                 board[move[1].x][move[1].y] = captured;
 
-                /* restore en-passant victim if removed */
-                if (ep_taken && ep_vx >= 0)
-                    board[ep_vx][ep_vy] = ep_victim;
+                // restore en-passant victim if removed
+                if (ep_taken && ep_row >= 0)
+                    board[ep_row][ep_col] = ep_victim;
 
-                /* illegal move — do not switch turn */
+                clearMoveset();
+                // illegal move — do not switch turn
                 continue;
             }
 
             /* move is legal: proceed to switch turn */
             *turn = (*turn == 'b') ? 'w' : 'b';
+
+            clearMoveset();
         }
 
         // clearing moveset
@@ -459,49 +584,41 @@ void *run(void *arg)
     }
 }
 
-
 /*--------------------------VALIDITY OF MOVE CHECK-----------------*/
 
-struct coordinate generateAM(struct coordinate move[])
+// generate attack map of enemy
+/* generate attack map for a specific attacker color (does NOT try to infer) */
+/* returns any king position encountered (not used by caller usually) */
+struct coordinate generateAM(struct coordinate move[], int attacker_color)
 {
-    struct coordinate king_pos = { -1, -1 };
+    struct coordinate king_pos = {-1, -1};
     struct coordinate current_coord;
     memset(attack_map, 0, sizeof(attack_map));
     clearMoveset();
-
-    /* attacker is the opponent of the piece now on move[1] (the mover) */
-    int attacker_color = board[move[1].x][move[1].y].color ^ 1;
 
     for (int i = 0; i < 8; i++)
     {
         for (int j = 0; j < 8; j++)
         {
             struct piece current = board[i][j];
-            if (current.recog == NONE) continue;
-
-            /* only generate attacks for attacker_color */
-            if (current.color != attacker_color) {
-                /* but still record king position if it's defender king (optional) */
-                if (current.recog == WK || current.recog == BK) {
-                    /* nothing — attacker_color != current.color so this is opponent king */
-                }
+            if (current.recog == NONE)
                 continue;
-            }
 
-            /* record king pos for defender side if encountered (not strictly needed here) */
+            /* only generate attacks for the requested attacker_color */
+            if (current.color != attacker_color)
+                continue;
+
+            /* still record king pos if we find one (optional) */
             if (current.recog == WK || current.recog == BK)
             {
                 king_pos.x = i;
                 king_pos.y = j;
             }
 
-            current_coord.x = i;
-            current_coord.y = j;
-
-            /* prepare nmove safely: source is (i,j); destination set to a safe value */
+            /* prepare a safe move[] for moveValidity */
             struct coordinate nmove[2];
             nmove[0].x = i; nmove[0].y = j;
-            nmove[1].x = i; nmove[1].y = j; /* moveValidity must not read uninitialized nmove[1] */
+            nmove[1].x = i; nmove[1].y = j; /* destination set to source so moveValidity doesn't read garbage */
 
             moveValidity(nmove, true);
         }
@@ -519,7 +636,6 @@ struct coordinate generateAM(struct coordinate move[])
     clearMoveset();
     return king_pos;
 }
-
 
 void moveValidity(struct coordinate move[], bool AMCall)
 {
@@ -546,6 +662,7 @@ void moveValidity(struct coordinate move[], bool AMCall)
     }
     else if (board[move[0].x][move[0].y].recog == WK || board[move[0].x][move[0].y].recog == BK)
     {
+        moveKing(move);
     }
     else
     {
@@ -738,7 +855,7 @@ void moveBishop(struct coordinate move[])
         if (board[i][j].recog == NONE)
         {
             struct coordinate coord = {i, j};
-            
+
             putMoveset(coord);
         }
         else if (board[i][j].color != p.color)
@@ -986,183 +1103,93 @@ void moveRook(struct coordinate move[])
 
 void movePawn(struct coordinate move[], bool AMCall)
 {
-
-    // to encompass en passant,
-    // moved -> 1
-    // doubleMove -> 0 previous move wasnt double
-    // doubleMove -> 1 previous move was double
-
     struct piece p = board[move[0].x][move[0].y];
+    int row = move[0].x;
+    int col = move[0].y;
 
+    // When generating attack map, pawns attack diagonals regardless of occupancy.
+    if (AMCall)
+    {
+        if (p.color == 0) // black pawn attacks down (higher row index)
+        {
+            if (row + 1 <= 7 && col - 1 >= 0) putMoveset((struct coordinate){row + 1, col - 1});
+            if (row + 1 <= 7 && col + 1 <= 7) putMoveset((struct coordinate){row + 1, col + 1});
+        }
+        else // white pawn attacks up (lower row index)
+        {
+            if (row - 1 >= 0 && col - 1 >= 0) putMoveset((struct coordinate){row - 1, col - 1});
+            if (row - 1 >= 0 && col + 1 <= 7) putMoveset((struct coordinate){row - 1, col + 1});
+        }
+        return;
+    }
+
+    // Normal move generation (non-AMCall)
     if (p.color == 0)
     {
-        if (!AMCall)
+        // two-square move: check both intermediate and target squares
+        if (p.moved == 0)
         {
-            // Adding double moves
-            //+2
-            if (p.moved == 0)
-            {
-                if (move[0].x + 2 <= 7 && board[move[0].x + 2][move[1].y].recog == NONE)
-                {
-                    struct coordinate coord = {move[0].x + 2, move[0].y};
-                    putMoveset(coord);
-                }
-            }
-
-            //+1
-            if (move[0].x + 1 <= 7 && board[move[0].x + 1][move[1].y].recog == NONE)
-            {
-                struct coordinate coord = {move[0].x + 1, move[0].y};
-                putMoveset(coord);
-            }
+            if (row + 2 <= 7 && board[row + 1][col].recog == NONE && board[row + 2][col].recog == NONE)
+                putMoveset((struct coordinate){row + 2, col});
         }
+        // one-square forward
+        if (row + 1 <= 7 && board[row + 1][col].recog == NONE)
+            putMoveset((struct coordinate){row + 1, col});
 
-        // diagonal right
-        if (move[0].y + 1 <= 7 && move[0].x + 1 <= 7)
+        // captures (diagonals)
+        if (row + 1 <= 7 && col + 1 <= 7 && board[row + 1][col + 1].recog != NONE && board[row + 1][col + 1].color != p.color)
+            putMoveset((struct coordinate){row + 1, col + 1});
+        if (row + 1 <= 7 && col - 1 >= 0 && board[row + 1][col - 1].recog != NONE && board[row + 1][col - 1].color != p.color)
+            putMoveset((struct coordinate){row + 1, col - 1});
+
+        // en-passant captures
+        if (row + 1 <= 7 && col - 1 >= 0)
         {
-            if (board[move[0].x + 1][move[1].y + 1].recog != NONE)
-            {
-                if (p.color != board[move[0].x + 1][move[1].y + 1].color)
-                {
-                    struct coordinate coord = {move[0].x + 1, move[0].y + 1};
-                    putMoveset(coord);
-                }
-            }
+            struct piece maybe = board[row][col - 1];
+            if ((maybe.recog == WP || maybe.recog == BP) && maybe.color != p.color && maybe.doubleMove == 1)
+                putMoveset((struct coordinate){row + 1, col - 1});
         }
-
-        // diagonal left
-        if (move[0].y - 1 >= 0 && move[0].x + 1 <= 7)
+        if (row + 1 <= 7 && col + 1 <= 7)
         {
-            if (board[move[0].x + 1][move[1].y - 1].recog != NONE)
-            {
-                if (p.color != board[move[0].x + 1][move[1].y - 1].color)
-                {
-                    struct coordinate coord = {move[0].x + 1, move[0].y - 1};
-                    putMoveset(coord);
-                }
-            }
-        }
-
-        if (!AMCall)
-        {
-            // en passant
-            if (move[0].x + 1 <= 7 &&
-                move[0].y - 1 >= 0 &&
-                (board[move[0].x][move[0].y - 1].recog == WP ||
-                 board[move[0].x][move[0].y - 1].recog == BP) &&
-                board[move[0].x][move[0].y - 1].color != p.color &&
-                board[move[0].x][move[0].y - 1].doubleMove == 1)
-            {
-
-                struct coordinate coord = {move[0].x + 1, move[0].y - 1};
-                putMoveset(coord);
-            }
-
-            if ((move[0].x + 1 <= 7 &&
-                     move[0].y + 1 <= 7 &&
-                     board[move[0].x][move[0].y + 1].recog == WP ||
-                 board[move[0].x][move[0].y + 1].recog == BP) &&
-                board[move[0].x][move[0].y + 1].color != p.color &&
-                board[move[0].x][move[0].y + 1].doubleMove == 1
-
-            )
-            {
-
-                struct coordinate coord = {move[0].x + 1, move[0].y + 1};
-                putMoveset(coord);
-            }
+            struct piece maybe = board[row][col + 1];
+            if ((maybe.recog == WP || maybe.recog == BP) && maybe.color != p.color && maybe.doubleMove == 1)
+                putMoveset((struct coordinate){row + 1, col + 1});
         }
     }
     else
     {
-
-        if (!AMCall)
+        // white pawns
+        if (p.moved == 0)
         {
-
-            // Adding double moves
-            //-2
-            if (p.moved == 0)
-            {
-                if (move[0].x - 2 >= 0 && board[move[0].x - 2][move[1].y].recog == NONE)
-                {
-                    struct coordinate coord = {move[0].x - 2, move[0].y};
-                    putMoveset(coord);
-                }
-            }
-
-            //+1
-            if (move[0].x - 1 >= 0 && board[move[0].x - 1][move[1].y].recog == NONE)
-            {
-                struct coordinate coord = {move[0].x - 1, move[0].y};
-                putMoveset(coord);
-            }
+            if (row - 2 >= 0 && board[row - 1][col].recog == NONE && board[row - 2][col].recog == NONE)
+                putMoveset((struct coordinate){row - 2, col});
         }
-    }
-    // diagonal left
-    if (move[0].y - 1 >= 0 && move[0].x - 1 >= 0)
-    {
-        if (board[move[0].x - 1][move[1].y - 1].recog != NONE)
+        if (row - 1 >= 0 && board[row - 1][col].recog == NONE)
+            putMoveset((struct coordinate){row - 1, col});
+
+        if (row - 1 >= 0 && col - 1 >= 0 && board[row - 1][col - 1].recog != NONE && board[row - 1][col - 1].color != p.color)
+            putMoveset((struct coordinate){row - 1, col - 1});
+        if (row - 1 >= 0 && col + 1 <= 7 && board[row - 1][col + 1].recog != NONE && board[row - 1][col + 1].color != p.color)
+            putMoveset((struct coordinate){row - 1, col + 1});
+
+        if (row - 1 >= 0 && col - 1 >= 0)
         {
-            if (p.color != board[move[0].x - 1][move[1].y - 1].color)
-            {
-                struct coordinate coord = {move[0].x - 1, move[0].y - 1};
-                putMoveset(coord);
-            }
+            struct piece maybe = board[row][col - 1];
+            if ((maybe.recog == WP || maybe.recog == BP) && maybe.color != p.color && maybe.doubleMove == 1)
+                putMoveset((struct coordinate){row - 1, col - 1});
         }
-    }
-
-    // diagonal right
-    if (move[0].y + 1 <= 7 && move[0].x - 1 >= 0)
-    {
-        if (board[move[0].x - 1][move[1].y + 1].recog != NONE)
+        if (row - 1 >= 0 && col + 1 <= 7)
         {
-            if (p.color != board[move[0].x - 1][move[1].y + 1].color)
-            {
-                struct coordinate coord = {move[0].x - 1, move[0].y + 1};
-                putMoveset(coord);
-            }
-        }
-    }
-    if (!AMCall)
-    {
-        // en passant
-
-        if (move[0].x - 1 >= 0 &&
-            move[0].y - 1 >= 0 &&
-            (board[move[0].x][move[0].y - 1].recog == WP ||
-             board[move[0].x][move[0].y - 1].recog == BP) &&
-            board[move[0].x][move[0].y - 1].color != p.color &&
-            board[move[0].x][move[0].y - 1].doubleMove == 1
-
-        )
-        {
-
-            struct coordinate coord = {move[0].x - 1, move[0].y - 1};
-            putMoveset(coord);
-        }
-
-        if (move[0].x - 1 >= 0 &&
-            move[0].y + 1 <= 7 &&
-            (board[move[0].x][move[0].y + 1].recog == WP ||
-             board[move[0].x][move[0].y + 1].recog == BP) &&
-            board[move[0].x][move[0].y + 1].color != p.color &&
-            board[move[0].x][move[0].y + 1].doubleMove == 1
-
-        )
-        {
-
-            struct coordinate coord = {move[0].x - 1, move[0].y + 1};
-            putMoveset(coord);
-            // removing pawn capture due to en passant
+            struct piece maybe = board[row][col + 1];
+            if ((maybe.recog == WP || maybe.recog == BP) && maybe.color != p.color && maybe.doubleMove == 1)
+                putMoveset((struct coordinate){row - 1, col + 1});
         }
     }
 }
-
 /*-----------------------------------------------------------------*/
 
-// Make the move after checking legality of the move
-
-// take move input in format e3b4
+/* Make the move after checking legality of the move
+   take move input in format e3b4 */
 void input(char turn, struct coordinate move[2])
 {
     char coords[5];
