@@ -6,6 +6,7 @@
 #include <stdbool.h>
 #include <SDL2/SDL_image.h>
 #include <pthread.h>
+#include <string.h>
 
 // Board and cell size
 #define WINDOW_SIZE 960
@@ -70,6 +71,10 @@ void moveBishop(struct coordinate move[]);
 void moveKnight(struct coordinate move[]);
 void moveRook(struct coordinate move[]);
 void increaseSizeMoveset();
+
+// prototypes for castling helpers (needed because run() calls them)
+bool canCastle(int color, char side);
+void doCastle(int color, char side);
 
 
 // moveset coordinate array
@@ -427,10 +432,28 @@ void *run(void *arg)
             }
             clearMoveset();
         }
-        /* ---------- end mate/stalemate ---------- */
+        /* ---------- check mate/stalemate ---------- */
 
         // takes requested move coordinate by user
         input(*turn, move);
+
+        // Handle castling sentinel before accessing board indices
+        if (move[0].x < 0)
+        {
+            char side = (move[0].x == -2) ? 'r' : 'l';
+            if (canCastle(cur_color, side))
+            {
+                doCastle(cur_color, side);
+                // switch turn
+                *turn = (*turn == 'b') ? 'w' : 'b';
+            }
+            else
+            {
+                printf("Illegal castle %c for %c\n", side, (*turn));
+            }
+            clearMoveset();
+            continue;
+        }
 
         // checks the validity of input provided
         if (board[move[0].x][move[0].y].recog == NONE)
@@ -489,18 +512,14 @@ void *run(void *arg)
 
         if (canMove)
         {
-            /* save current source piece (after any flags you set above) for rollback */
             struct piece src_backup = board[move[0].x][move[0].y];
 
-            /* save the piece currently on destination for rollback */
             struct piece captured = board[move[1].x][move[1].y];
 
-            /* en-passant bookkeeping */
             struct piece ep_victim = {0};
             int ep_row = -1, ep_col = -1;
             int ep_taken = 0;
 
-            /* en-passant detection & remove victim (if any) */
             if (move[0].y != move[1].y && move[0].x != move[1].x)
             {
                 if (p.recog == WP || p.recog == BP)
@@ -527,13 +546,11 @@ void *run(void *arg)
                 }
             }
 
-            /* apply the move (move piece struct to destination) */
             board[move[1].x][move[1].y] = board[move[0].x][move[0].y];
             board[move[1].x][move[1].y].coord.x = move[1].x;
             board[move[1].x][move[1].y].coord.y = move[1].y;
             board[move[0].x][move[0].y] = (struct piece){{move[0].x, move[0].y}, NONE, 0, 0, 0, 0};
 
-            /* generate opponent attack map (attacker = opponent of mover) to test if mover left own king in check */
             struct coordinate king_pos_after_move = {-1,-1};
             // find mover's king (its color == src_backup.color)
             for (int i = 0; i < 8; i++) {
@@ -556,24 +573,19 @@ void *run(void *arg)
 
             // if mover's king is under attack, rollback and reject move
             if (king_pos_after_move.x >= 0 && attack_map[king_pos_after_move.x][king_pos_after_move.y]) {
-                // rollback source
                 board[move[0].x][move[0].y] = src_backup;
                 board[move[0].x][move[0].y].coord.x = move[0].x;
                 board[move[0].x][move[0].y].coord.y = move[0].y;
 
-                // rollback destination
                 board[move[1].x][move[1].y] = captured;
 
-                // restore en-passant victim if removed
                 if (ep_taken && ep_row >= 0)
                     board[ep_row][ep_col] = ep_victim;
 
                 clearMoveset();
-                // illegal move — do not switch turn
                 continue;
             }
 
-            /* move is legal: proceed to switch turn */
             *turn = (*turn == 'b') ? 'w' : 'b';
 
             clearMoveset();
@@ -587,8 +599,6 @@ void *run(void *arg)
 /*--------------------------VALIDITY OF MOVE CHECK-----------------*/
 
 // generate attack map of enemy
-/* generate attack map for a specific attacker color (does NOT try to infer) */
-/* returns any king position encountered (not used by caller usually) */
 struct coordinate generateAM(struct coordinate move[], int attacker_color)
 {
     struct coordinate king_pos = {-1, -1};
@@ -604,27 +614,22 @@ struct coordinate generateAM(struct coordinate move[], int attacker_color)
             if (current.recog == NONE)
                 continue;
 
-            /* only generate attacks for the requested attacker_color */
             if (current.color != attacker_color)
                 continue;
 
-            /* still record king pos if we find one (optional) */
             if (current.recog == WK || current.recog == BK)
             {
                 king_pos.x = i;
                 king_pos.y = j;
             }
 
-            /* prepare a safe move[] for moveValidity */
             struct coordinate nmove[2];
             nmove[0].x = i; nmove[0].y = j;
-            nmove[1].x = i; nmove[1].y = j; /* destination set to source so moveValidity doesn't read garbage */
-
+            nmove[1].x = i; nmove[1].y = j; 
             moveValidity(nmove, true);
         }
     }
 
-    /* set attack_map from moveset with bounds check */
     for (int k = 0; k < pos; k++)
     {
         int x = moveset[k].x;
@@ -1195,31 +1200,134 @@ void input(char turn, struct coordinate move[2])
     char coords[5];
     printf("Enter move for %c: ", turn);
     scanf("%4s", coords);
+    
     convertToCoord(coords, move);
 }
-
+ 
 void convertToCoord(char coord[], struct coordinate move[])
 {
-    // expecting input like "a8a6"
-    int col1 = coord[0] - 'a';       // file → col
-    int row1 = 8 - (coord[1] - '0'); // rank → row (flip so 8=0, 1=7)
-
-    int col2 = coord[2] - 'a';
-    int row2 = 8 - (coord[3] - '0');
-
-    if (0 <= col1 && col1 < 8 && 0 <= col2 && col2 < 8 &&
-        0 <= row1 && row1 < 8 && 0 <= row2 && row2 < 8)
+    // accept "cr" or "cl" as castle commands
+    if (coord[0] == 'c' && coord[1] == 'r' && coord[2] == '\0')
     {
-
-        printf("%d %d %d %d\n", row1, col1, row2, col2);
-
-        move[0] = (struct coordinate){row1, col1}; // (row, col)
-        move[1] = (struct coordinate){row2, col2};
+        move[0] = (struct coordinate){-2, 0};
+        move[1] = (struct coordinate){-2, 0};
         return;
     }
+    if (coord[0] == 'c' && coord[1] == 'l' && coord[2] == '\0')
+    {
+        move[0] = (struct coordinate){-3, 0};
+        move[1] = (struct coordinate){-3, 0};
+        return;
+    }
+ 
+     // expecting input like "a8a6"
+     int col1 = coord[0] - 'a';       
+     int row1 = 8 - (coord[1] - '0'); 
+ 
+     int col2 = coord[2] - 'a';
+     int row2 = 8 - (coord[3] - '0');
+ 
+     if (0 <= col1 && col1 < 8 && 0 <= col2 && col2 < 8 &&
+         0 <= row1 && row1 < 8 && 0 <= row2 && row2 < 8)
+     {
 
-    printf("Coordinate conversion error\n");
+         printf("%d %d %d %d\n", row1, col1, row2, col2);
+
+         move[0] = (struct coordinate){row1, col1}; // (row, col)
+         move[1] = (struct coordinate){row2, col2};
+         return;
+     }
+
+     printf("Coordinate conversion error\n");
+ }
+
+/*-------------------------- CASTLING HELPERS --------------------------*/
+
+bool canCastle(int color, char side)
+{
+    // find king
+    int king_row = -1, king_col = -1;
+    for (int r = 0; r < 8; r++)
+        for (int c = 0; c < 8; c++)
+            if ((color == 1 && board[r][c].recog == WK) || (color == 0 && board[r][c].recog == BK))
+            {
+                king_row = r;
+                king_col = c;
+                break;
+            }
+    if (king_row == -1) return false;
+
+    struct piece king = board[king_row][king_col];
+    if (king.moved) return false; // king already moved
+
+    int rook_col = (side == 'r') ? 7 : 0;
+    struct piece rook = board[king_row][rook_col];
+    // rook must exist, be same color, and unmoved
+    if ( (color == 1 && rook.recog != WR) || (color == 0 && rook.recog != BR) ) return false;
+    if (rook.moved) return false;
+
+    // squares between king and rook must be empty
+    int from = (king_col < rook_col) ? king_col : rook_col;
+    int to = (king_col < rook_col) ? rook_col : king_col;
+    for (int c = from + 1; c < to; c++)
+        if (board[king_row][c].recog != NONE) return false;
+
+    // squares king traverses must not be under attack and king must not be in check
+    int dir = (side == 'r') ? 1 : -1;
+    memset(attack_map, 0, sizeof(attack_map));
+    clearMoveset();
+    struct coordinate dummy[2] = {{0,0},{0,0}};
+    generateAM(dummy, !color);
+
+    if (attack_map[king_row][king_col]) return false;
+    int pass_col = king_col + dir;
+    if (pass_col < 0 || pass_col > 7) return false;
+    if (attack_map[king_row][pass_col]) return false;
+    int dest_col = king_col + 2 * dir;
+    if (dest_col < 0 || dest_col > 7) return false;
+    if (attack_map[king_row][dest_col]) return false;
+
+    clearMoveset();
+    return true;
 }
+
+// Perform castle on board (assumes legality checked). Updates moved flags.
+void doCastle(int color, char side)
+{
+    // find king
+    int king_row = -1, king_col = -1;
+    for (int r = 0; r < 8; r++)
+        for (int c = 0; c < 8; c++)
+            if ((color == 1 && board[r][c].recog == WK) || (color == 0 && board[r][c].recog == BK))
+            {
+                king_row = r;
+                king_col = c;
+                break;
+            }
+    if (king_row == -1) return;
+
+    int dir = (side == 'r') ? 1 : -1;
+    int rook_col = (side == 'r') ? 7 : 0;
+
+    // new king position and rook position
+    int new_king_col = king_col + 2 * dir;
+    int new_rook_col = king_col + dir;
+
+    board[king_row][new_king_col] = board[king_row][king_col];
+    board[king_row][new_king_col].coord.x = king_row;
+    board[king_row][new_king_col].coord.y = new_king_col;
+    board[king_row][new_king_col].moved = 1;
+
+    board[king_row][king_col] = (struct piece){{king_row, king_col}, NONE, 0, 0, 0, 0};
+
+    board[king_row][new_rook_col] = board[king_row][rook_col];
+    board[king_row][new_rook_col].coord.x = king_row;
+    board[king_row][new_rook_col].coord.y = new_rook_col;
+    board[king_row][new_rook_col].moved = 1;
+
+    board[king_row][rook_col] = (struct piece){{king_row, rook_col}, NONE, 0, 0, 0, 0};
+}
+/*---------------------- end castling helpers -----------------------*/
 
 // Main code
 int main()
